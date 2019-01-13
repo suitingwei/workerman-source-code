@@ -1,1 +1,27 @@
 2019-01-07 10:10:05 pid:57395 Workerman[httpServer.php] start in DEBUG mode
+2019-01-12 20:49:52 pid:63332 Workerman[httpServer.php] start in DEBUG mode
+2019-01-12 20:51:20 pid:63394 Workerman[httpServer.php] start in DEBUG mode
+2019-01-12 20:51:26 pid:63456 Workerman[httpServer.php] start in DEBUG mode
+2019-01-12 20:51:30 pid:63504 Workerman[httpServer.php] start in DEBUG mode
+2019-01-12 20:52:07 pid:63533 Workerman[httpServer.php] start in DEBUG mode
+2019-01-13 21:30:39 pid:63533 Workerman[httpServer.php] stopping ...
+2019-01-13 21:30:39 pid:63533 Workerman[httpServer.php] has been stopped
+2019-01-13 21:30:40 pid:691 Workerman[httpServer.php] start in DEBUG mode
+2019-01-13 21:31:49 pid:691 Workerman[httpServer.php] stopping ...
+2019-01-13 21:31:49 pid:691 Workerman[httpServer.php] has been stopped
+2019-01-13 21:31:50 pid:740 Workerman[httpServer.php] start in DEBUG mode
+2019-01-13 21:32:09 pid:740 Workerman[httpServer.php] stopping ...
+2019-01-13 21:32:09 pid:740 Workerman[httpServer.php] has been stopped
+2019-01-13 21:32:10 pid:769 Workerman[httpServer.php] start in DEBUG mode
+2019-01-13 21:32:26 pid:769 Workerman[httpServer.php] stopping ...
+2019-01-13 21:32:26 pid:769 Workerman[httpServer.php] has been stopped
+2019-01-13 21:32:27 pid:804 Workerman[httpServer.php] start in DEBUG mode
+2019-01-13 21:33:13 pid:804 Workerman[httpServer.php] stopping ...
+2019-01-13 21:33:13 pid:804 Workerman[httpServer.php] has been stopped
+2019-01-13 21:33:24 pid:848 Workerman[httpServer.php] start in DEBUG mode
+2019-01-13 21:33:34 pid:848 Workerman[httpServer.php] stopping ...
+2019-01-13 21:33:34 pid:848 Workerman[httpServer.php] has been stopped
+2019-01-13 21:33:35 pid:872 Workerman[httpServer.php] start in DEBUG mode
+2019-01-13 21:35:18 pid:872 Workerman[httpServer.php] stopping ...
+2019-01-13 21:35:18 pid:872 Workerman[httpServer.php] has been stopped
+2019-01-13 21:35:18 pid:933 Workerman[httpServer.php] start in DEBUG mode

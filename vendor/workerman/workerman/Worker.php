@@ -637,7 +637,7 @@ class Worker
             foreach (static::getUiColumns() as $column_name => $prop)
             {
                 //如果没有设置属性，默认给一个 NNNN，这四个N 是个啥
-                if (!isset($worker{$prop})) {
+                if (!isset($worker->{$prop})) {
                     $worker->{$prop} = 'NNNN';
                 }
                 
@@ -2205,10 +2205,13 @@ class Worker
         if (!$this->_mainSocket) {
             // Get the application layer communication protocol and listening address.
             list($scheme, $address) = explode(':', $this->_socketName, 2);
+            echo sprintf("Scheme:[ %s ],address:[ %s ]\n",$scheme,$address);
             // Check application layer protocol class.
             if (!isset(static::$_builtinTransports[$scheme])) {
                 $scheme         = ucfirst($scheme);
                 $this->protocol = substr($scheme, 0, 1) === '\\' ? $scheme : '\\Protocols\\' . $scheme;
+                echo sprintf("Protocol:[%s]\n",$this->protocol);
+                //这里默认查询的是当前的命名空间，workerman
                 if (!class_exists($this->protocol)) {
                     $this->protocol = "\\Workerman\\Protocols\\$scheme";
                     if (!class_exists($this->protocol)) {
