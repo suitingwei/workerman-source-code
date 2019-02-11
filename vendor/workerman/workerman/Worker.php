@@ -544,9 +544,17 @@ class Worker
         
         //进入守护进程模式
         static::daemonize();
-        
-        //初始化workers
+    
+        /**
+         * 初始化 worker
+         * 设置进程名，启动用户等信息
+         * 启动监听套接字。
+         */
         static::initWorkers();
+        
+        /**
+         * 安装信号量处理器。
+         */
         static::installSignal();
         static::saveMasterPid();
         static::displayUI();
@@ -1115,6 +1123,7 @@ class Worker
         if (static::$_OS !== OS_TYPE_LINUX) {
             return;
         }
+        
         // stop
         pcntl_signal(SIGINT, array('\Workerman\Worker', 'signalHandler'), false);
         // graceful stop
@@ -2265,11 +2274,15 @@ class Worker
         
         // Autoload.
         Autoloader::setRootPath($this->_autoloadRootPath);
-        
+    
+        /**
+         * 因为这个方法是复用调用的，所以多了个判断是否有了监听套接字。
+         * 如果有的话，就不在重新进行监听操作了,如果没有了再走一遍监听操作。
+         */
         if (!$this->_mainSocket) {
             // Get the application layer communication protocol and listening address.
             list($scheme, $address) = explode(':', $this->_socketName, 2);
-            echo sprintf("Scheme:[ %s ],address:[ %s ]\n", $scheme, $address);
+            
             // Check application layer protocol class.
             if (!isset(static::$_builtinTransports[$scheme])) {
                 $scheme         = ucfirst($scheme);
@@ -2300,8 +2313,12 @@ class Worker
             if ($this->reusePort) {
                 stream_context_set_option($this->_context, 'socket', 'so_reuseport', 1);
             }
-            
-            // Create an Internet or Unix domain server socket.
+    
+            /**
+             * 核心操作，创建监听套接字
+             * 使用给定的配置，上下文。如果创建失败的话，直接报错。
+             * 执行到这一步的时候，每一个 worker 都会有一个监听套接字。
+             */
             $this->_mainSocket = stream_socket_server($local_socket, $errno, $errmsg, $flags, $this->_context);
             if (!$this->_mainSocket) {
                 throw new Exception($errmsg);
@@ -2328,11 +2345,16 @@ class Worker
                 socket_set_option($socket, SOL_TCP, TCP_NODELAY, 1);
                 restore_error_handler();
             }
-            
-            // Non blocking.
+    
+            //设置为
             stream_set_blocking($this->_mainSocket, 0);
         }
-        
+    
+        /**
+         * 恢复 worker 接受请求的能力。
+         * 这里主要是把监听套接字放到了select/epoll的读文件描述符集合中。
+         * 之后的select/epoll 主循环还在下面执行。这里只是做 add 操作。
+         */
         $this->resumeAccept();
     }
     
@@ -2368,6 +2390,11 @@ class Worker
     
     /**
      * Resume accept new connections.
+     * ----------------------------------------------------------------------------------------
+     * 这里相当于注册了select/poll/epoll的文件描述符。将这个新的监听套接字放到了监听的"读文件描述符集合"中，
+     * 然后当这个上面发生了事件之后，相当于有了新的请求。就执行`acceptConnection`的回调。不过这个大哥还是
+     * 做了一个基本的抽象，不是用的 if/else来处理的调用，而是抽象了一个EventClass，然后基于libevent,
+     * select提供了不同的实现类。
      *
      * @return void
      */
@@ -2383,7 +2410,6 @@ class Worker
             $this->_pauseAccept = false;
         }
     }
-    
     /**
      * Get socket name.
      *
