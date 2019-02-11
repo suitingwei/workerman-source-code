@@ -9,7 +9,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use Workerman\Worker;
 
 // #### http worker ####
-$http_worker = new Worker("http://0.0.0.0:8919");
+$http_worker = new Worker("http://0.0.0.0:8998");
 
 // 4 processes
 $http_worker->count = 4;
@@ -17,12 +17,27 @@ $http_worker->count = 4;
 // Emitted when data received
 $http_worker->onMessage = function(\Workerman\Connection\TcpConnection $connection, $data)
 {
-    $_GET;
-    // $_GET, $_POST, $_COOKIE, $_SESSION, $_SERVER, $_FILES are available
-//    var_dump($_GET, $_POST, $_COOKIE, $_SESSION, $_SERVER, $_FILES);
-    // send data to client
-    $connection->send("hello world \n");
+    $connection->send(
+        sprintf("WorkerId:%s\nId:%s\n",$connection->worker->workerId,$connection->worker->id)
+    );
 };
 
-// run all workers
+// #### http worker ####
+$httpServer2 = new Worker("http://0.0.0.0:8999");
+
+// 4 processes
+$httpServer2->count = 4;
+
+// Emitted when data received
+$httpServer2->onMessage = function(\Workerman\Connection\TcpConnection $connection, $data)
+{
+    $connection->send(
+        sprintf("WorkerId:%s\nId:%s\nPidMaps:%s\n",
+            $connection->worker->workerId,
+            $connection->worker->id
+        )
+    );
+    
+};
+
 Worker::runAll();

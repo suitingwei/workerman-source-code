@@ -101,6 +101,13 @@ class Worker
     public $id = 0;
     
     /**
+     * 这个 worker进程的id，注意这个 id 不是说的 pid，而是 workerman 内部使用的
+     *
+     * @var string
+     */
+    public $workerId;
+    
+    /**
      * Name of the worker processes.
      *
      * @var string
@@ -333,6 +340,8 @@ class Worker
     
     /**
      * All worker instances.
+     * 所有的服务器workers。比如tcp://0.0.0.0:8000,tcp://0.0.0.0:9000
+     * 这是两个 worker，那么理论上应该启动两个 worker 去负责各自的请求。
      *
      * @var Worker[]
      */
@@ -495,6 +504,15 @@ class Worker
     protected static $_outputDecorated = null;
     
     /**
+     * 进程的 socket 名字，其实类似 sockName属性
+     * @var string
+     */
+    private $socket;
+    
+    private $status;
+    
+    
+    /**
      * Run all worker instances.
      *
      * @return void
@@ -560,6 +578,12 @@ class Worker
      */
     protected static function init()
     {
+        /**
+         * 这一步的主要目的是兼容了在debug模式以及daemon模式中能够对应输出错误信息。
+         * 比如在debug的时候，我们可以直接把输出信息输出到标准输出，也就是屏幕上。
+         * 但是在daemon的时候因为进入后台执行，不会有人去看显示器，所以这个时候
+         * 的输出应该是在 log 文件中。
+         */
         set_error_handler(function ($code, $msg, $file, $line) {
             Worker::safeEcho("$msg in file $file on line $line\n");
         });
@@ -568,21 +592,32 @@ class Worker
         $backtrace          = debug_backtrace();
         static::$_startFile = $backtrace[count($backtrace) - 1]['file'];
         
-        
         $unique_prefix = str_replace('/', '_', static::$_startFile);
-        
-        // Pid file.
+    
+        /**
+         * 设定 PID 文件。
+         * 如果没有指定 PID 文件，那么使用这个 php 启动的脚本文件作为 pid 前缀。
+         * 保存目录是固定在`vendor/workerman`中。
+         */
         if (empty(static::$pidFile)) {
             static::$pidFile = __DIR__ . "/../$unique_prefix.pid";
         }
-        
-        // Log file.
+    
+        /**
+         * 设定 Log 文件。
+         * 如果没有特殊指定，那么都打印到`vendor/workerman`中的`workerman.log`文件中。
+         * 如果这个文件不存在，那么稍后会直接创建这个文件。
+         */
         if (empty(static::$logFile)) {
             static::$logFile = __DIR__ . '/../workerman.log';
         }
         $log_file = (string)static::$logFile;
         if (!is_file($log_file)) {
             touch($log_file);
+            /**
+             * 622这个权限是：-rw--w--w-
+             * 但是看实际的文件系统里的文件权限是：`-rw-r--r--`
+             */
             chmod($log_file, 0622);
         }
         
@@ -636,8 +671,7 @@ class Worker
             $worker->status = '<g> [OK] </g>';
             
             // Get column mapping for UI
-            foreach (static::getUiColumns() as $column_name => $prop)
-            {
+            foreach (static::getUiColumns() as $column_name => $prop) {
                 //如果没有设置属性，默认给一个 NNNN，这四个N 是个啥
                 if (!isset($worker->{$prop})) {
                     $worker->{$prop} = 'NNNN';
@@ -650,8 +684,16 @@ class Worker
                 //设置 socketName 最大长度
                 static::$$key = max(static::${$key}, $prop_length);
             }
-            
-            // Listen.
+    
+            /**
+             * 如果没有开启端口复用的话，进入 socket监听。
+             * ----------------------------------------------------------------------------------------
+             * resuePort是 socket 的一个选项，由操作系统提供支持，开启了端口复用之后，操作系统会允许多个没有亲缘关系
+             * 的进程同时监听同一个端口，并且提供监听端口的负载均衡,从而在操作系统层面解决了惊群效应。如果没有开启的话，
+             * 那么就相当于每一个进程开启一个端口监听，注意这个是和`重复启动进程监听相同端口`是不一样的。比如说 nginx
+             * 监听了80端口，那么我们再启动一个worker监听80,这个时候是会报错的。而如果我们开启了一个监听80端口的进程
+             * 之后，再通过fork调用创建子进程，那么这些子进程都能够共享这些监听套接字。（从而导致惊群效应...）
+             */
             if (!$worker->reusePort) {
                 $worker->listen();
             }
@@ -685,6 +727,14 @@ class Worker
     protected static function initId()
     {
         foreach (static::$_workers as $worker_id => $worker) {
+            /**
+             * 设置这个worker 的进程组成员 id。
+             * 比如这个worker(也就是服务器)设置了4个进程数量，那么在这个 worker 下要有四个一样的进程。
+             * 主进程需要记录这些信息，所以需要以
+             * ` [ workerId => [ 0 => 第1个进程 pid, 1 => 第2个进程 pid,2 => 第3个进程 pid] `
+             * 这个结构来记录这些信息。而考虑到不是每一次初始化都是在启动进程，还有可能是重启或者停止，那么
+             * 还有需要判断这个worker 的某一个编号进程是否已经启动了。
+             */
             $new_id_map    = array();
             $worker->count = $worker->count <= 0 ? 1 : $worker->count;
             for ($key = 0; $key < $worker->count; $key++) {
@@ -858,6 +908,10 @@ class Worker
         
         // Get master process PID.
         $master_pid      = is_file(static::$pidFile) ? file_get_contents(static::$pidFile) : 0;
+        
+        /**
+         * 不知道这个posix_kill(pid,0)什么意思
+         */
         $master_is_alive = $master_pid && posix_kill($master_pid, 0) && posix_getpid() != $master_pid;
         // Master is still alive?
         if ($master_is_alive) {
@@ -2170,10 +2224,18 @@ class Worker
      */
     public function __construct($socket_name = '', $context_option = array())
     {
-        // Save all worker instances.
-        $this->workerId                    = spl_object_hash($this);
+        //这个进程在 workerman 内部的标识符，用来区分不同的server。
+        //比如同时启动了tcp-server-01,tcp-server-02,那么这个 workerid 是用来区分不同的服务器的。
+        $this->workerId = spl_object_hash($this);
+        
+        /**
+         * 保存这个 worker 实例到Worker的静态变量中,这个主要是用于 workerman 最终启动所有服务器的时候。
+         * 可以方便的使用语法： `Worker::runAll();`，运行所有静态变量中的实例。
+         */
         static::$_workers[$this->workerId] = $this;
-        static::$_pidMap[$this->workerId]  = array();
+        
+        //保存这个服务器的所有工作进程的 pid。
+        static::$_pidMap[$this->workerId] = array();
         
         // Get autoload root path.
         $backtrace               = debug_backtrace();
@@ -2207,10 +2269,13 @@ class Worker
         if (!$this->_mainSocket) {
             // Get the application layer communication protocol and listening address.
             list($scheme, $address) = explode(':', $this->_socketName, 2);
+            echo sprintf("Scheme:[ %s ],address:[ %s ]\n", $scheme, $address);
             // Check application layer protocol class.
             if (!isset(static::$_builtinTransports[$scheme])) {
                 $scheme         = ucfirst($scheme);
                 $this->protocol = substr($scheme, 0, 1) === '\\' ? $scheme : '\\Protocols\\' . $scheme;
+                echo sprintf("Protocol:[%s]\n", $this->protocol);
+                //这里默认查询的是当前的命名空间，workerman
                 if (!class_exists($this->protocol)) {
                     $this->protocol = "\\Workerman\\Protocols\\$scheme";
                     if (!class_exists($this->protocol)) {
