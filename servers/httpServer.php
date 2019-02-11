@@ -15,10 +15,11 @@ $http_worker = new Worker("http://0.0.0.0:8919");
 $http_worker->count = 4;
 
 // Emitted when data received
-$http_worker->onMessage = function($connection, $data)
+$http_worker->onMessage = function(\Workerman\Connection\TcpConnection $connection, $data)
 {
+    $_GET;
     // $_GET, $_POST, $_COOKIE, $_SESSION, $_SERVER, $_FILES are available
-    var_dump($_GET, $_POST, $_COOKIE, $_SESSION, $_SERVER, $_FILES);
+//    var_dump($_GET, $_POST, $_COOKIE, $_SESSION, $_SERVER, $_FILES);
     // send data to client
     $connection->send("hello world \n");
 };

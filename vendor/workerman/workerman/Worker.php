@@ -498,6 +498,7 @@ class Worker
      * Run all worker instances.
      *
      * @return void
+     * @throws \Exception
      */
     public static function runAll()
     {
@@ -606,6 +607,7 @@ class Worker
      * Init All worker instances.
      *
      * @return void
+     * @throws \Exception
      */
     protected static function initWorkers()
     {
@@ -637,7 +639,7 @@ class Worker
             foreach (static::getUiColumns() as $column_name => $prop)
             {
                 //如果没有设置属性，默认给一个 NNNN，这四个N 是个啥
-                if (!isset($worker{$prop})) {
+                if (!isset($worker->{$prop})) {
                     $worker->{$prop} = 'NNNN';
                 }
                 
