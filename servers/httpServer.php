@@ -40,4 +40,5 @@ $httpServer2->onMessage = function(\Workerman\Connection\TcpConnection $connecti
     
 };
 
+Worker::$logFile ='/tmp/workerman.debug.log';
 Worker::runAll();

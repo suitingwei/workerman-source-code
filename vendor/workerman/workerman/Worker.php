@@ -505,6 +505,7 @@ class Worker
     
     /**
      * 进程的 socket 名字，其实类似 sockName属性
+     *
      * @var string
      */
     private $socket;
@@ -544,7 +545,7 @@ class Worker
         
         //进入守护进程模式
         static::daemonize();
-    
+        
         /**
          * 初始化 worker
          * 设置进程名，启动用户等信息
@@ -554,12 +555,29 @@ class Worker
         
         /**
          * 安装信号量处理器。
+         * 处理重启信号、停止信号、status 等
          */
         static::installSignal();
+        
+        //保存主进程的 pid
         static::saveMasterPid();
+        
+        //展示 UI 信息
         static::displayUI();
+        
+        /**
+         * 为每一个 worker 复制对应的count数量的进程
+         */
         static::forkWorkers();
+        
+        /**
+         * 重定向标准输入输出
+         */
         static::resetStd();
+        
+        /**
+         * 监控 worker进程组
+         */
         static::monitorWorkers();
     }
     
@@ -570,6 +588,7 @@ class Worker
      */
     protected static function checkSapiEnv()
     {
+        static::log("1.Checking sapi environment...");
         // Only for cli.
         if (php_sapi_name() != "cli") {
             exit("only run in command line mode \n");
@@ -593,7 +612,7 @@ class Worker
          * 的输出应该是在 log 文件中。
          */
         set_error_handler(function ($code, $msg, $file, $line) {
-            Worker::safeEcho("$msg in file $file on line $line\n");
+            static::safeEcho("$msg in file $file on line $line\n");
         });
         
         // Start file.
@@ -601,7 +620,7 @@ class Worker
         static::$_startFile = $backtrace[count($backtrace) - 1]['file'];
         
         $unique_prefix = str_replace('/', '_', static::$_startFile);
-    
+        
         /**
          * 设定 PID 文件。
          * 如果没有指定 PID 文件，那么使用这个 php 启动的脚本文件作为 pid 前缀。
@@ -610,7 +629,7 @@ class Worker
         if (empty(static::$pidFile)) {
             static::$pidFile = __DIR__ . "/../$unique_prefix.pid";
         }
-    
+        
         /**
          * 设定 Log 文件。
          * 如果没有特殊指定，那么都打印到`vendor/workerman`中的`workerman.log`文件中。
@@ -657,6 +676,7 @@ class Worker
         if (static::$_OS !== OS_TYPE_LINUX) {
             return;
         }
+        static::log(sprintf("Initializing workers:<w>%s</w>...", json_encode(static::$_workers)));
         foreach (static::$_workers as $worker) {
             // Worker name.
             if (empty($worker->name)) {
@@ -692,7 +712,7 @@ class Worker
                 //设置 socketName 最大长度
                 static::$$key = max(static::${$key}, $prop_length);
             }
-    
+            
             /**
              * 如果没有开启端口复用的话，进入 socket监听。
              * ----------------------------------------------------------------------------------------
@@ -703,6 +723,7 @@ class Worker
              * 之后，再通过fork调用创建子进程，那么这些子进程都能够共享这些监听套接字。（从而导致惊群效应...）
              */
             if (!$worker->reusePort) {
+                static::log(sprintf("Worker:%s start to listen to:%s", $worker->workerId, $worker->socket));
                 $worker->listen();
             }
         }
@@ -734,6 +755,7 @@ class Worker
      */
     protected static function initId()
     {
+        static::log("Initializing worker ids map...");
         foreach (static::$_workers as $worker_id => $worker) {
             /**
              * 设置这个worker 的进程组成员 id。
@@ -750,6 +772,7 @@ class Worker
             }
             static::$_idMap[$worker_id] = $new_id_map;
         }
+        static::log(sprintf("Initialized worker ids map:%s", json_encode(static::$_idMap)));
     }
     
     /**
@@ -912,10 +935,10 @@ class Worker
                 $mode = 'in DEBUG mode';
             }
         }
-        static::log("Workerman[$start_file] $command $mode");
+        static::log("Parsing command, workerman[$start_file] $command $mode");
         
         // Get master process PID.
-        $master_pid      = is_file(static::$pidFile) ? file_get_contents(static::$pidFile) : 0;
+        $master_pid = is_file(static::$pidFile) ? file_get_contents(static::$pidFile) : 0;
         
         /**
          * 不知道这个posix_kill(pid,0)什么意思
@@ -1138,6 +1161,8 @@ class Worker
         pcntl_signal(SIGIO, array('\Workerman\Worker', 'signalHandler'), false);
         // ignore
         pcntl_signal(SIGPIPE, SIG_IGN, false);
+        
+        static::log("Installing signals...");
     }
     
     /**
@@ -1238,6 +1263,7 @@ class Worker
             throw new Exception('fork fail');
         } //标准 fork，返回 pid>0表示这是父进程，返回的 pid 就是 fork 出来的子进程pid
         elseif ($pid > 0) {
+            static::log("The workerman parent process:" . posix_getpid() . " exited!");
             exit(0);
         }
         if (-1 === posix_setsid()) {
@@ -1366,6 +1392,7 @@ class Worker
      * Fork some worker processes.
      *
      * @return void
+     * @throws \Exception
      */
     protected static function forkWorkers()
     {
@@ -1380,10 +1407,11 @@ class Worker
      * Fork some worker processes.
      *
      * @return void
+     * @throws \Exception
      */
     protected static function forkWorkersForLinux()
     {
-        
+        static::log(sprintf("Forking workers:<w>%s</w>", json_encode(static::$_workers)));
         foreach (static::$_workers as $worker) {
             if (static::$_status === static::STATUS_STARTING) {
                 if (empty($worker->name)) {
@@ -1394,8 +1422,12 @@ class Worker
                     static::$_maxWorkerNameLength = $worker_name_length;
                 }
             }
-            
+    
+            /**
+             * 为每一个 worker 复制指定数量的进程组
+             */
             while (count(static::$_pidMap[$worker->workerId]) < $worker->count) {
+                static::log(sprintf("Forking worker:<w>%s</w>", $worker->workerId));
                 static::forkOneWorkerForLinux($worker);
             }
         }
@@ -1523,8 +1555,9 @@ class Worker
      */
     protected static function forkOneWorkerForLinux($worker)
     {
-        // Get available worker id.
+        //这段代码是运行在 master 进程中的，所以整个 master 保存了所有 worker 的所有进程组的编号
         $id = static::getId($worker->workerId, 0);
+        static::log(sprintf("Forking a new worker id:<w>%s</w>, current pid:<w>%s</w>",$id,posix_getpid()));
         if ($id === false) {
             return;
         }
@@ -1537,14 +1570,22 @@ class Worker
         elseif (0 === $pid) {
             srand();
             mt_srand();
+            //如果这个 worker 进程组开启了端口复用，那么子进程也去监听这个端口
             if ($worker->reusePort) {
                 $worker->listen();
             }
+            //重置这个进程的标准输入输出
             if (static::$_status === static::STATUS_STARTING) {
                 static::resetStd();
             }
             static::$_pidMap = array();
-            // Remove other listener.
+            /**
+             * 进程只监控他负责的端口
+             * ----------------------------------------------------------------------------------------
+             * 1. 因为进程的监听操作是在父进程完成的。所以刚刚 fork 出来的子进程同时监听了所有 worker 对应的端口的。
+             * 并且因为 fork 的时候内存区、代码都是复制的，所以这个静态变量`static::$_workers`同样跟父进程中的值
+             * 是相同的。然后子进程关闭不是当前 worker 负责的端口。
+             */
             foreach (static::$_workers as $key => $one_worker) {
                 if ($one_worker->workerId !== $worker->workerId) {
                     $one_worker->unlisten();
@@ -1555,6 +1596,10 @@ class Worker
             static::setProcessTitle('WorkerMan: worker process  ' . $worker->name . ' ' . $worker->getSocketName());
             $worker->setUserAndGroup();
             $worker->id = $id;
+            /**
+             * 执行真正的 run 操作
+             * 进入 while 循环，然后接受请求，处理信息
+             */
             $worker->run();
             $err = new Exception('event-loop exited');
             static::log($err);
@@ -1632,12 +1677,14 @@ class Worker
             setproctitle($title);
         }
         restore_error_handler();
+//        static::log(sprintf("Setting process id:%s title:%s", posix_getpid(), $title));
     }
     
     /**
      * Monitor all child processes.
      *
      * @return void
+     * @throws \Exception
      */
     protected static function monitorWorkers()
     {
@@ -1652,6 +1699,7 @@ class Worker
      * Monitor all child processes.
      *
      * @return void
+     * @throws \Exception
      */
     protected static function monitorWorkersForLinux()
     {
@@ -2274,7 +2322,7 @@ class Worker
         
         // Autoload.
         Autoloader::setRootPath($this->_autoloadRootPath);
-    
+        
         /**
          * 因为这个方法是复用调用的，所以多了个判断是否有了监听套接字。
          * 如果有的话，就不在重新进行监听操作了,如果没有了再走一遍监听操作。
@@ -2287,7 +2335,6 @@ class Worker
             if (!isset(static::$_builtinTransports[$scheme])) {
                 $scheme         = ucfirst($scheme);
                 $this->protocol = substr($scheme, 0, 1) === '\\' ? $scheme : '\\Protocols\\' . $scheme;
-                echo sprintf("Protocol:[%s]\n", $this->protocol);
                 //这里默认查询的是当前的命名空间，workerman
                 if (!class_exists($this->protocol)) {
                     $this->protocol = "\\Workerman\\Protocols\\$scheme";
@@ -2313,7 +2360,7 @@ class Worker
             if ($this->reusePort) {
                 stream_context_set_option($this->_context, 'socket', 'so_reuseport', 1);
             }
-    
+            
             /**
              * 核心操作，创建监听套接字
              * 使用给定的配置，上下文。如果创建失败的话，直接报错。
@@ -2345,11 +2392,11 @@ class Worker
                 socket_set_option($socket, SOL_TCP, TCP_NODELAY, 1);
                 restore_error_handler();
             }
-    
+            
             //设置为
             stream_set_blocking($this->_mainSocket, 0);
         }
-    
+        
         /**
          * 恢复 worker 接受请求的能力。
          * 这里主要是把监听套接字放到了select/epoll的读文件描述符集合中。
@@ -2410,6 +2457,7 @@ class Worker
             $this->_pauseAccept = false;
         }
     }
+    
     /**
      * Get socket name.
      *
@@ -2442,6 +2490,8 @@ class Worker
             static::$globalEvent = new $event_loop_class;
             $this->resumeAccept();
         }
+        
+        static::log(sprintf("Global event:<w>%s</w>",get_class(static::$globalEvent)));
         
         // Reinstall signal.
         static::reinstallSignal();
