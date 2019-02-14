@@ -941,9 +941,12 @@ class Worker
         $master_pid = is_file(static::$pidFile) ? file_get_contents(static::$pidFile) : 0;
         
         /**
-         * 不知道这个posix_kill(pid,0)什么意思
+         * 判断 master 是否仍然存活的几个标准。
+         * 1. pidfile 中存在一个进程 id
+         * 2. 通过kill函数发送信号量0,如果进程仍然存在，那么他会返回 true，否则返回false
          */
         $master_is_alive = $master_pid && posix_kill($master_pid, 0) && posix_getpid() != $master_pid;
+        
         // Master is still alive?
         if ($master_is_alive) {
             if ($command === 'start') {
@@ -973,6 +976,7 @@ class Worker
                     sleep(1);
                     // Clear terminal.
                     if ($command2 === '-d') {
+                        //这个命令是清除屏幕的
                         static::safeEcho("\33[H\33[2J\33(B\33[m", true);
                     }
                     // Echo status data.
@@ -1060,9 +1064,12 @@ class Worker
     protected static function formatStatusData()
     {
         static $total_request_cache = array();
+        
+        //读取统计信息文件，不存在就算了
         if (!is_readable(static::$_statisticsFile)) {
             return '';
         }
+        //无视换行符
         $info = file(static::$_statisticsFile, FILE_IGNORE_NEW_LINES);
         if (!$info) {
             return '';
