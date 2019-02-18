@@ -2598,14 +2598,14 @@ class Worker
         $connection->onBufferDrain          = $this->onBufferDrain;
         $connection->onBufferFull           = $this->onBufferFull;
         
-        // Try to emit onConnect callback.
+        // Try to emit onConnect callback.因为onConnect回调只会触发一次，所以会在这里调用
         if ($this->onConnect) {
             try {
                 call_user_func($this->onConnect, $connection);
-            } catch (\Exception $e) {
+            } catch (\Error $e) {
                 static::log($e);
                 exit(250);
-            } catch (\Error $e) {
+            } catch (\Exception $e) {
                 static::log($e);
                 exit(250);
             }
