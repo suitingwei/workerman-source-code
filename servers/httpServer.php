@@ -31,13 +31,11 @@ $httpServer2->count = 4;
 // Emitted when data received
 $httpServer2->onMessage = function(\Workerman\Connection\TcpConnection $connection, $data)
 {
-    $connection->send(
-        sprintf("WorkerId:%s\nId:%s\nPidMaps:%s\n",
-            $connection->worker->workerId,
-            $connection->worker->id
-        )
-    );
+    $e = new \Exception;
+    $backTrace = ($e->getTraceAsString());
+    $connection->send(sprintf("The debug backtrace is :\n%s", ($backTrace)));
     
+    Worker::log(sprintf("The debug backtrace for connection->onMessage is :%s",($backTrace)));
 };
 
 Worker::$logFile ='/tmp/workerman.debug.log';

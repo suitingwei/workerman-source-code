@@ -14,6 +14,7 @@
 
 namespace Workerman\Connection;
 
+use Error;
 use Workerman\Events\EventInterface;
 use Workerman\Worker;
 
@@ -279,7 +280,7 @@ class TcpConnection extends ConnectionInterface
             } catch (\Exception $e) {
                 Worker::log($e);
                 exit(250);
-            } catch (\Error $e) {
+            } catch (Error $e) {
                 Worker::log($e);
                 exit(250);
             }
@@ -415,7 +416,7 @@ class TcpConnection extends ConnectionInterface
                         } catch (\Exception $e) {
                             Worker::log($e);
                             exit(250);
-                        } catch (\Error $e) {
+                        } catch (Error $e) {
                             Worker::log($e);
                             exit(250);
                         }
@@ -656,21 +657,23 @@ class TcpConnection extends ConnectionInterface
                     set_error_handler(function ($code, $msg, $file, $line) {
                         Worker::safeEcho("$msg in file $file on line $line\n");
                     });
-                    
                     //获取当前包的大小，在 http 协议是有content-length,不过这里 workerman 好坑，他的interface 没有完全实现，
-                    //只有 ws 协议是完整实现了，其他的虽然实现了，但是没有写implement
+                    //只有 ws 协议是完整实现了，其他的虽然实现了，但是没有写implement，所以没法直接去用 ide 查看。这里就自己找到
+                    //workerman\\protocols\\*.php 对查看对应的解析即可
                     $this->_currentPackageLength = $parser::input($this->_recvBuffer, $this);
                     restore_error_handler();
                     
                     // The packet length is unknown.
                     if ($this->_currentPackageLength === 0) {
+                        //跳出 while 循环，直接return了，这样最终就会进入`stream_select`循环中，等待客户端链接发送的下一个包数据;
                         break;
                     } elseif ($this->_currentPackageLength > 0 && $this->_currentPackageLength <= $this->maxPackageSize) {
-                        // Data is not enough for a package.
+                        //如果这个包的大小比目前收集到的包大小大，那么还需要继续接受包，直接 break
                         if ($this->_currentPackageLength > strlen($this->_recvBuffer)) {
                             break;
                         }
-                    } // Wrong package.
+                    }
+                    //如果当前包的大小比定义的最大值还大，视为错误包。断开链接,进行四次挥手
                     else {
                         Worker::safeEcho('error package. package_length=' . var_export($this->_currentPackageLength, true));
                         $this->destroy();
@@ -698,17 +701,18 @@ class TcpConnection extends ConnectionInterface
                     continue;
                 }
                 try {
-                    // Decode request buffer before Emitting onMessage callback.
+                    //执行onMessage回调，同时使用decode方法来解析包数据
                     call_user_func($this->onMessage, $this, $parser::decode($one_request_buffer, $this));
                 } catch (\Exception $e) {
                     Worker::log($e);
                     exit(250);
-                } catch (\Error $e) {
+                } catch (Error $e) {
                     Worker::log($e);
                     exit(250);
                 }
             }
             
+            Worker::log(sprintf("Receiving data from connection:%s",$buffer));
             return;
         }
         
@@ -728,7 +732,7 @@ class TcpConnection extends ConnectionInterface
         } catch (\Exception $e) {
             Worker::log($e);
             exit(250);
-        } catch (\Error $e) {
+        } catch (Error $e) {
             Worker::log($e);
             exit(250);
         }
@@ -762,7 +766,7 @@ class TcpConnection extends ConnectionInterface
                 } catch (\Exception $e) {
                     Worker::log($e);
                     exit(250);
-                } catch (\Error $e) {
+                } catch (Error $e) {
                     Worker::log($e);
                     exit(250);
                 }
@@ -826,7 +830,7 @@ class TcpConnection extends ConnectionInterface
             } catch (\Exception $e) {
                 Worker::log($e);
                 exit(250);
-            } catch (\Error $e) {
+            } catch (Error $e) {
                 Worker::log($e);
                 exit(250);
             }
@@ -920,7 +924,7 @@ class TcpConnection extends ConnectionInterface
                 } catch (\Exception $e) {
                     Worker::log($e);
                     exit(250);
-                } catch (\Error $e) {
+                } catch (Error $e) {
                     Worker::log($e);
                     exit(250);
                 }
@@ -943,7 +947,7 @@ class TcpConnection extends ConnectionInterface
                 } catch (\Exception $e) {
                     Worker::log($e);
                     exit(250);
-                } catch (\Error $e) {
+                } catch (Error $e) {
                     Worker::log($e);
                     exit(250);
                 }
@@ -994,7 +998,7 @@ class TcpConnection extends ConnectionInterface
             } catch (\Exception $e) {
                 Worker::log($e);
                 exit(250);
-            } catch (\Error $e) {
+            } catch (Error $e) {
                 Worker::log($e);
                 exit(250);
             }
@@ -1006,7 +1010,7 @@ class TcpConnection extends ConnectionInterface
             } catch (\Exception $e) {
                 Worker::log($e);
                 exit(250);
-            } catch (\Error $e) {
+            } catch (Error $e) {
                 Worker::log($e);
                 exit(250);
             }
